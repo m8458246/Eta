@@ -248,7 +248,9 @@ internal class McpToolExecutor(
         return AgentModelClient.ToolResult(
             content = payload.toString(),
             images = images,
-            sensitive = true,
+            // MCP 结果必须完整进入持久会话：workspaceId、editSessionId、locator 等句柄
+            // 都要跨轮原样回传，脱敏会让多步工作流直接断链。
+            sensitive = false,
         )
     }
 
@@ -259,7 +261,7 @@ internal class McpToolExecutor(
                 .put("code", code)
                 .put("message", message)
                 .toString(),
-            sensitive = true,
+            sensitive = false,
         )
 
     private fun String.takeUtf8Bytes(maxBytes: Int): String {

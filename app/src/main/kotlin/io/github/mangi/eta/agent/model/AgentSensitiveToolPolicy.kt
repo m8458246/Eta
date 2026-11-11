@@ -1,9 +1,16 @@
 package io.github.mangi.eta.agent.model
 
-/** 标记原始参数或结果不得进入持久会话的工具。 */
+/**
+ * 标记原始参数或结果不得进入持久会话的工具。
+ *
+ * 注意：MCP 工具不再纳入此列表。MCP 服务器普遍是「多步、有状态、靠不透明句柄串联」的
+ * 工作流（workspaceId / editSessionId / nextCursor / targetVersion / locator 都要跨轮回传），
+ * 一旦参数与结果被替换成占位符，历史里就只剩 {"redacted":true}，模型下一轮无法继续，
+ * 甚至会把占位符当合法参数重放。MCP 服务器由用户自己配置在本机，结果需要完整持久化。
+ */
 internal object AgentSensitiveToolPolicy {
     fun isSensitive(toolName: String): Boolean =
-        toolName.startsWith("mcp_") || toolName in sensitiveTools || toolName in io.github.mangi.eta.agent.context.PersonalSearchTools.names || toolName in AgentPhoneToolCatalog.names
+        toolName in sensitiveTools || toolName in io.github.mangi.eta.agent.context.PersonalSearchTools.names || toolName in AgentPhoneToolCatalog.names
 
     private val sensitiveTools = setOf(
         "get_setting",

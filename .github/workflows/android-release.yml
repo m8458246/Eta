@@ -66,23 +66,43 @@ jobs:
           ETA_RELEASE_KEY_ALIAS: ${{ secrets.ETA_RELEASE_KEY_ALIAS }}
           ETA_RELEASE_KEY_PASSWORD: ${{ secrets.ETA_RELEASE_KEY_PASSWORD }}
         run: |
-          if [[ -z "$ETA_RELEASE_KEYSTORE_BASE64" ||
-                -z "$ETA_RELEASE_STORE_PASSWORD" ||
-                -z "$ETA_RELEASE_KEY_ALIAS" ||
-                -z "$ETA_RELEASE_KEY_PASSWORD" ]]; then
-            echo "::error::缺少 Release 签名 Secrets，请检查仓库的 Actions Secrets。"
-            exit 1
+          if [[ -n "$ETA_RELEASE_KEYSTORE_BASE64" &&
+                -n "$ETA_RELEASE_STORE_PASSWORD" &&
+                -n "$ETA_RELEASE_KEY_ALIAS" &&
+                -n "$ETA_RELEASE_KEY_PASSWORD" ]]; then
+            printf '%s' "$ETA_RELEASE_KEYSTORE_BASE64" \
+              | base64 --decode \
+              > "$RUNNER_TEMP/eta-release.jks"
+            store_password="$ETA_RELEASE_STORE_PASSWORD"
+            key_alias="$ETA_RELEASE_KEY_ALIAS"
+            key_password="$ETA_RELEASE_KEY_PASSWORD"
+          else
+            # 未配置发版 Secrets（例如个人复刻仓库）时不再中断构建：
+            # 生成一次性签名证书，保证产出的 Release APK 可以直接安装。
+            echo "::warning::未配置 Release 签名 Secrets，本次使用一次性生成的签名证书。"
+            keytool -genkeypair \
+              -keystore "$RUNNER_TEMP/eta-release.jks" \
+              -storetype PKCS12 \
+              -storepass eta-fork-build \
+              -keypass eta-fork-build \
+              -alias eta-fork \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Eta Fork, OU=Build, O=Eta, C=CN"
+            store_password="eta-fork-build"
+            key_alias="eta-fork"
+            key_password="eta-fork-build"
           fi
-          printf '%s' "$ETA_RELEASE_KEYSTORE_BASE64" \
-            | base64 --decode \
-            > "$RUNNER_TEMP/eta-release.jks"
+          {
+            echo "ETA_RELEASE_STORE_FILE=$RUNNER_TEMP/eta-release.jks"
+            echo "ETA_RELEASE_STORE_PASSWORD=$store_password"
+            echo "ETA_RELEASE_KEY_ALIAS=$key_alias"
+            echo "ETA_RELEASE_KEY_PASSWORD=$key_password"
+          } >> "$GITHUB_ENV"
 
       - name: 构建 Debug 与 Release APK
-        env:
-          ETA_RELEASE_STORE_FILE: ${{ runner.temp }}/eta-release.jks
-          ETA_RELEASE_STORE_PASSWORD: ${{ secrets.ETA_RELEASE_STORE_PASSWORD }}
-          ETA_RELEASE_KEY_ALIAS: ${{ secrets.ETA_RELEASE_KEY_ALIAS }}
-          ETA_RELEASE_KEY_PASSWORD: ${{ secrets.ETA_RELEASE_KEY_PASSWORD }}
+        # 签名参数由上一步写入 GITHUB_ENV；这里不再用 Secrets 覆盖，否则空值会禁用签名配置。
         # 发版标签保持纯净版本名；其余构建追加 +<短提交号>，与已发布版本区分
         run: |
           metadata_arg=()
