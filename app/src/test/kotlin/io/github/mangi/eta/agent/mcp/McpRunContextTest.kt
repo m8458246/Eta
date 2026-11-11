@@ -11,6 +11,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -72,7 +73,8 @@ class McpRunContextTest {
             val payload = JSONObject(result.content)
 
             assertEquals("Bearer run-token", authorization.get())
-            assertTrue(result.sensitive)
+            // MCP 结果必须可持久化，否则 workspaceId 这类句柄跨轮就丢了
+            assertFalse(result.sensitive)
             assertTrue(payload.getBoolean("truncated"))
             assertEquals(1, payload.getInt("omitted_items"))
             assertTrue(payload.getJSONArray("content").getString(0).contains("https://example.com/docs"))
