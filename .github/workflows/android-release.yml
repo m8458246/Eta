@@ -166,9 +166,10 @@ jobs:
           retention-days: 14
 
   # 构建 job 持有签名 Secrets，写 Release 的权限单独放在这里，且只在发版标签上运行
-  draft-release:
-    name: 创建 Release 草稿
-    needs: [verify, build-apks]
+  publish-release:
+    name: 发布 Release APK
+    # 个人复刻仓库里 lint/单测不是发版门槛；只依赖实际构建结果
+    needs: [build-apks]
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -185,15 +186,14 @@ jobs:
           name: Eta-${{ github.ref_name }}.apk
           path: ${{ runner.temp }}/release
 
-      # 只建草稿：草稿不会出现在 releases/latest，App 内更新检查要等维护者手动发布后才可见
-      - name: 创建 Release 草稿
+      # 个人复刻仓库直接发布正式 Release，产物无需登录即可下载
+      - name: 创建 Release
         env:
           GH_TOKEN: ${{ github.token }}
           APK_PATH: ${{ runner.temp }}/release/Eta-${{ github.ref_name }}.apk
         run: >-
           gh release create "$GITHUB_REF_NAME" "$APK_PATH"
           --repo "$GITHUB_REPOSITORY"
-          --draft
           --verify-tag
-          --title "$GITHUB_REF_NAME"
-          --generate-notes
+          --title "Eta Fork $GITHUB_REF_NAME"
+          --notes "个人复刻构建：保留 MCP 工具参数与结果到持久会话，修复跨轮断链。包名 io.github.mangi.eta。"
