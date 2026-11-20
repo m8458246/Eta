@@ -15,6 +15,9 @@ import kotlinx.coroutines.supervisorScope
 import org.json.JSONArray
 import org.json.JSONObject
 
+/** 在途检查点的最小写入间隔；见 AgentLoop.publishTranscript。 */
+private const val TRANSCRIPT_PUBLISH_MIN_INTERVAL_MS = 1_500L
+
 /**
  * 单次 Agent run 的纯编排循环。
  *
@@ -82,11 +85,27 @@ internal class AgentLoop(
     }
 
     private var publishedTranscriptSize = 0
+    private var lastTranscriptPublishAtMs = 0L
 
-    private fun publishTranscript() {
+    /**
+     * 写入在途检查点。
+     *
+     * 每轮会调用 2–3 次（工具结果后、图片后、轮次结束），而每次都要把整条 transcript
+     * 重新编码并整行更新；工具结果完整持久化后单条可达 64KB 以上，重复写会放大成
+     * 明显的 IO 开销。这里按时间节流：除非 [force]，否则 1.5s 内只写一次。
+     * 内容不会丢失——下一次 publish 或 run 结束时的强制写入会补上。
+     */
+    private fun publishTranscript(force: Boolean = false) {
         if (publishedTranscriptSize == transcript.length()) return
+        val now = monotonicNowMs()
+        if (!force && lastTranscriptPublishAtMs != 0L &&
+            now - lastTranscriptPublishAtMs < TRANSCRIPT_PUBLISH_MIN_INTERVAL_MS
+        ) {
+            return
+        }
         onTranscript(AgentConversationCodec.transcript(transcript, 0, sensitiveToolCallIds))
         publishedTranscriptSize = transcript.length()
+        lastTranscriptPublishAtMs = now
     }
 
     fun compactOnly(): Result {
@@ -117,7 +136,8 @@ internal class AgentLoop(
             availableToolNames = (0 until roundTools.length()).mapNotNullTo(mutableSetOf()) { index ->
                 roundTools.optJSONObject(index)?.optJSONObject("function")?.optString("name")
             }
-            publishTranscript()
+            // 进入下一轮前强制落盘：这是模型调用前的安全点，检查点必须与历史一致。
+            publishTranscript(force = true)
             if (purpose.allowsTools) context.compact()
             val requestMessages = AssistantScreenContextProjection.project(
                 roleplayContext?.projectMessages(messages) ?: messages,
@@ -297,7 +317,7 @@ internal class AgentLoop(
                 error(message)
             }
 
-            publishTranscript()
+            publishTranscript(force = true)
             if (purpose.allowsTools) context.compact(final = true)
             onEvent(AgentEvent.RunFinished(round = round, contentChars = content.length))
             return Result(
