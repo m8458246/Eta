@@ -451,7 +451,8 @@ class AgentLocalToolsPermissionTest {
         val json = JSONObject(result.content)
         assertFalse(json.getBoolean("ok"))
         assertEquals("TOOL_DISABLED", json.getString("code"))
-        assertTrue(result.sensitive)
+        // 自用分支不再按工具名标记敏感
+        assertFalse(result.sensitive)
         tools.close()
     }
 

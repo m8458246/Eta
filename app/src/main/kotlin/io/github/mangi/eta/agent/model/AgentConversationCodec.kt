@@ -9,12 +9,10 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.json.JSONTokener
 
-/** Provider JSON 与 Eta 稳定会话 DTO 之间的转换；脱敏不改变普通文本与工具批次。 */
+/** Provider JSON 与 Eta 稳定会话 DTO 之间的转换；自用分支不做工具内容脱敏。 */
 internal object AgentConversationCodec {
 
     private const val IMAGE_OMITTED_TEXT = "[图片观察已在当前回合使用，未写入持久会话]"
-    private const val SENSITIVE_TOOL_OMITTED_TEXT =
-        "[敏感工具参数与原始结果仅供当前回合使用，未写入持久会话]"
     private val json = Json {
         ignoreUnknownKeys = true
         encodeDefaults = false
@@ -200,49 +198,26 @@ internal object AgentConversationCodec {
                     .put("arguments", argumentsJson),
             )
 
+    /**
+     * 自用分支：不再按工具名脱敏，工具参数与结果原样进入持久会话。
+     *
+     * 保留 sensitiveToolCallIds 参数只为兼容既有调用方（AgentLoop / AgentModelClient），
+     * 它不再参与任何替换；图片与内联 base64 的体积保护仍由 sanitizeMessage 负责。
+     */
+    @Suppress("UNUSED_PARAMETER")
     fun transcript(
         messages: JSONArray,
         startIndex: Int,
         sensitiveToolCallIds: Set<String> = emptySet(),
-    ): List<AgentModelClient.ConversationMessage> {
-        val redactedIds = sensitiveToolCallIds.toMutableSet()
-        for (index in startIndex until messages.length()) {
-            val message = messages.optJSONObject(index) ?: continue
-            parseToolCalls(message).filter { AgentSensitiveToolPolicy.isSensitive(it.name) }
-                .forEach { redactedIds += it.id }
-        }
-        return buildList {
+    ): List<AgentModelClient.ConversationMessage> =
+        buildList {
             for (index in startIndex until messages.length()) {
                 messages.optJSONObject(index)
-                    ?.let { redactSensitiveToolData(it, redactedIds) }
                     ?.let(::fromJsonObject)
                     ?.let(::sanitizeMessage)
                     ?.let(::add)
             }
         }
-    }
-
-    private fun redactSensitiveToolData(
-        source: JSONObject,
-        sensitiveToolCallIds: Set<String>,
-    ): JSONObject {
-        if (sensitiveToolCallIds.isEmpty()) return source
-        val copy = JSONObject(source.toString())
-        if (
-            copy.optString("role") == "tool" &&
-            copy.optString("tool_call_id") in sensitiveToolCallIds
-        ) {
-            copy.put("content", SENSITIVE_TOOL_OMITTED_TEXT)
-        }
-        val calls = copy.optJSONArray("tool_calls") ?: return copy
-        for (index in 0 until calls.length()) {
-            val call = calls.optJSONObject(index) ?: continue
-            if (call.optString("id") !in sensitiveToolCallIds) continue
-            call.optJSONObject("function")
-                ?.put("arguments", JSONObject().put("redacted", true).toString())
-        }
-        return copy
-    }
 
     fun durableMessage(message: JSONObject): AgentModelClient.ConversationMessage =
         sanitizeMessage(fromJsonObject(message))
