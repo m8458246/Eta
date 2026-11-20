@@ -140,7 +140,7 @@ class AgentContextCompactionTest {
     }
 
     @Test
-    fun summaryInputRedactsSensitiveToolsAndOpaqueReasoningAndImages() {
+    fun summaryInputKeepsToolContentButDropsReasoningAndImages() {
         val messages = JSONArray().put(JSONObject().put("role", "system").put("content", "规则"))
         messages.put(AgentConversationCodec.userTextMessage("旧任务"))
         val assistant = JSONObject().put("role", "assistant").put("content", "读取结果")
@@ -157,7 +157,10 @@ class AgentContextCompactionTest {
         messages.put(pending)
         val compacted = AgentContextCompactor(config, provider { request, _ ->
             val text = request.messages.toString()
-            listOf("SECRET_ARGUMENT", "SECRET_RESULT", "PRIVATE_THINKING", "OPAQUE_SECRET", "PRIVATE_IMAGE").forEach {
+            // 自用分支不再脱敏工具内容：参数与结果会进入摘要输入。
+            assertTrue(text.contains("SECRET_ARGUMENT"))
+            assertTrue(text.contains("SECRET_RESULT"))
+            listOf("PRIVATE_THINKING", "OPAQUE_SECRET", "PRIVATE_IMAGE").forEach {
                 assertFalse("摘要包含敏感数据 $it", text.contains(it))
             }
             response("已读取过信息，原始敏感结果未保留。")
