@@ -32,9 +32,11 @@ jobs:
         uses: ./.github/actions/setup-build
 
       - name: Lint 与单元测试
-        run: >-
-          ./gradlew --no-daemon --no-configuration-cache --continue
-          :app:lintDebug :app:testDebugUnitTest
+        shell: bash
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon --no-configuration-cache --continue \
+            :app:lintDebug :app:testDebugUnitTest 2>&1 | tee gradle-verify.log
 
       - name: 上传检查报告
         if: failure()
@@ -46,6 +48,18 @@ jobs:
             app/build/test-results/
           if-no-files-found: ignore
           retention-days: 7
+
+      # 复刻仓库的失败原因要能在未登录状态下看到：把构建输出尾部写进 job summary
+      - name: 汇总失败原因
+        if: failure()
+        shell: bash
+        run: |
+          {
+            echo '## 失败摘要'
+            echo '```text'
+            tail -n 220 gradle-verify.log 2>/dev/null || echo '未捕获到构建输出'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   build-apks:
     name: 构建 Debug 与 Release APK
