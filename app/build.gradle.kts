@@ -43,8 +43,8 @@ android {
         minSdk = 33
         targetSdk = 37
         // versionCode 规则：yyyyMMdd + 两位当日序号（01 起），发版时随 versionName 一起手动递增。
-        versionCode = 2026111304
-        versionName = "3.4.6"
+        versionCode = 2026111305
+        versionName = "3.4.7"
 
         ndk {
             // 同时过滤本地与依赖 AAR 的原生库，确保 APK 仅包含 ARM64。
@@ -126,6 +126,9 @@ android {
         unitTests.isIncludeAndroidResources = true
         // Robolectric 在高版本 JDK 下需要访问内部 API，参数只作用于测试 JVM。
         unitTests.all {
+            // EtaBackupStreamingTest 会构造 17MB 文本并做 JSON/SQLite 往返，
+            // 默认 512MB 测试堆在 CI 上会偶发 OutOfMemoryError；给足堆避免假失败。
+            it.maxHeapSize = "2g"
             it.jvmArgs(
                 "--add-opens=java.base/java.lang=ALL-UNNAMED",
                 "--add-opens=java.base/java.util=ALL-UNNAMED",
