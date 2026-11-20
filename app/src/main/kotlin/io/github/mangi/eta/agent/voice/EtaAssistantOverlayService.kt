@@ -21,6 +21,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.SystemClock
 import android.provider.Settings
 import android.view.Gravity
 import android.view.View
@@ -134,6 +135,8 @@ internal class EtaAssistantOverlayService : Service(), LifecycleOwner, SavedStat
     private var activeRunId: String? = null
     private var entryGeneration = 0L
     private var presentedEntryGeneration = -1L
+    @Volatile
+    private var entryShownUptimeMs = 0L
     private var entryInputPending = false
     private var entryEntranceComplete by mutableStateOf(false)
     private var entryContentReady = false
@@ -198,6 +201,7 @@ internal class EtaAssistantOverlayService : Service(), LifecycleOwner, SavedStat
 
     override fun onDestroy() {
         entryGeneration++
+        entryShownUptimeMs = 0L
         EtaAssistantScreenContexts.release(entryScreenContext?.id)
         entryScreenContext = null
         cancelCurrentRun()
@@ -216,6 +220,16 @@ internal class EtaAssistantOverlayService : Service(), LifecycleOwner, SavedStat
                 "Eta assistant overlay permission is missing"
             }
             stopSelf()
+            return
+        }
+        // 长按电源键的按下/松开或双路派发可能跨越 1s 去重窗后再次到达，
+        // 浮窗仍处于刚唤起的初始空闲态时直接合并，避免重建窗口重播入场光效。
+        if (isFreshVisibleEntry()) {
+            if (entryScreenContext == null && screenContextId != null) {
+                entryScreenContext = EtaAssistantScreenContexts.find(screenContextId)
+            } else if (entryScreenContext?.id != screenContextId) {
+                EtaAssistantScreenContexts.release(screenContextId)
+            }
             return
         }
         dismissalJob?.cancel()
@@ -245,11 +259,27 @@ internal class EtaAssistantOverlayService : Service(), LifecycleOwner, SavedStat
         presentedEntryGeneration = generation
         showWindow()
         if (windowView == null) {
+            entryShownUptimeMs = 0L
             stopSelf()
             return
         }
+        entryShownUptimeMs = SystemClock.uptimeMillis()
         presentEntryInput()
     }
+
+    private fun isFreshVisibleEntry(nowUptimeMs: Long = SystemClock.uptimeMillis()): Boolean =
+        shouldCoalesceFreshEntry(
+            hasWindow = windowView != null,
+            isDetaching = detachingWindowView != null,
+            isDismissing = dismissalJob != null,
+            hiddenForForegroundOperation = hiddenForForegroundOperation,
+            handoffInProgress = handoffInProgress,
+            handoffExitRequested = handoffExitRequested,
+            hasActiveRun = activeRunId != null,
+            hasMessages = uiState.messages.isNotEmpty(),
+            entryShownUptimeMs = entryShownUptimeMs,
+            nowUptimeMs = nowUptimeMs,
+        )
 
     private fun presentEntryInput() {
         if (!entryInputPending || windowView == null || activeRunId != null) return
@@ -451,12 +481,9 @@ internal class EtaAssistantOverlayService : Service(), LifecycleOwner, SavedStat
         }
     }
 
-    private fun showKeyboard(status: EtaVoiceStatus = EtaVoiceStatus.InputRequest) {
+    private fun showKeyboard() {
         entryInputPending = false
-        uiState = uiState.copy(
-            phase = EtaVoicePhase.READY,
-            status = status,
-        )
+        uiState = uiState.copy(phase = EtaVoicePhase.READY)
         updateSoftInput(visible = true)
         inputFocusRequestKey++
     }
@@ -483,7 +510,6 @@ internal class EtaAssistantOverlayService : Service(), LifecycleOwner, SavedStat
         val runId = activeRunId ?: return
         uiState = uiState.copy(
             phase = EtaVoicePhase.PROCESSING,
-            status = EtaVoiceStatus.Reasoning,
             messages = uiState.messages + UserMessageUi(
                 id = "user-$runId",
                 content = normalized,
@@ -508,6 +534,7 @@ internal class EtaAssistantOverlayService : Service(), LifecycleOwner, SavedStat
                     config = config.copy(supportsSearchSuggestions = true),
                     images = runImages,
                     history = conversationHistory,
+                    modelSessionId = conversationKey,
                     handoff = AgentRuntimeWire.EntryHandoff(
                         id = "$conversationKey:$runId",
                         source = AgentRuntimeWire.ETA_VOICE_HANDOFF_SOURCE,
@@ -531,13 +558,11 @@ internal class EtaAssistantOverlayService : Service(), LifecycleOwner, SavedStat
                 if (result.ok) {
                     uiState = uiState.copy(
                         phase = EtaVoicePhase.READY,
-                        status = EtaVoiceStatus.Completed,
                         messages = finishRunMessages(runId, result),
                     )
                 } else {
                     uiState = uiState.copy(
                         phase = EtaVoicePhase.ERROR,
-                        status = EtaVoiceStatus.Failed(result.error),
                         messages = finishRunMessages(runId, result),
                     )
                 }
@@ -603,7 +628,6 @@ internal class EtaAssistantOverlayService : Service(), LifecycleOwner, SavedStat
         state: EtaVoiceUiState,
     ): EtaVoiceUiState {
         var messages = runMessageProjector.applyEvent(runId, event, state.messages)
-        var status = state.status
         var phase = state.phase
         when (event) {
             is AgentEvent.UserSupplementReceived -> {
@@ -612,19 +636,10 @@ internal class EtaAssistantOverlayService : Service(), LifecycleOwner, SavedStat
                     messages = messages + UserMessageUi(id = id, content = event.text)
                 }
             }
-            is AgentEvent.ToolStarted -> status = EtaVoiceStatus.RunningTool(event.name)
-            is AgentEvent.HostedToolStarted -> status = EtaVoiceStatus.RunningTool(event.name)
-            is AgentEvent.RunFailed -> {
-                phase = EtaVoicePhase.ERROR
-                status = EtaVoiceStatus.Failed(event.reason)
-            }
-            is AgentEvent.ContextCompaction,
-            is AgentEvent.ModelRetryScheduled,
-            is AgentEvent.ProviderRequestStarted,
-            -> status = EtaVoiceStatus.Reasoning
+            is AgentEvent.RunFailed -> phase = EtaVoicePhase.ERROR
             else -> Unit
         }
-        return state.copy(messages = messages, phase = phase, status = status)
+        return state.copy(messages = messages, phase = phase)
     }
 
     private fun finishRunMessages(
@@ -643,7 +658,12 @@ internal class EtaAssistantOverlayService : Service(), LifecycleOwner, SavedStat
         }
         val notice = when {
             result.ok && result.content.isBlank() -> SystemNoticeCode.EmptyResult
-            !result.ok && result.error == LEGACY_STOPPED_ERROR -> SystemNoticeCode.Stopped
+            !result.ok && (
+                result.error == LEGACY_STOPPED_ERROR ||
+                    result.error == SYNTHETIC_STOPPED ||
+                    result.error == "Stopped" ||
+                    result.error == getString(R.string.runtime_err_stopped)
+                ) -> SystemNoticeCode.Stopped
             !result.ok -> SystemNoticeCode.RuntimeFailed
             else -> null
         }
@@ -665,7 +685,6 @@ internal class EtaAssistantOverlayService : Service(), LifecycleOwner, SavedStat
             runJob = null
             uiState = uiState.copy(
                 phase = EtaVoicePhase.READY,
-                status = EtaVoiceStatus.Stopped,
                 messages = runMessageProjector.failRunningTools(
                     SYNTHETIC_STOPPED,
                     runMessageProjector.finalizeText(
@@ -720,6 +739,7 @@ internal class EtaAssistantOverlayService : Service(), LifecycleOwner, SavedStat
     }
 
     private fun removeWindow(onComplete: ((Boolean) -> Unit)? = null) {
+        entryShownUptimeMs = 0L
         entryInputPending = false
         playback.stop()
         speechInput.cancel()
@@ -885,10 +905,34 @@ internal class EtaAssistantOverlayService : Service(), LifecycleOwner, SavedStat
         private const val SYNTHETIC_STOPPED = "eta_status:stopped"
         private const val SYNTHETIC_RUNTIME_FAILED = "eta_status:runtime_failed"
         private const val FOREGROUND_DISMISS_TIMEOUT_MS = 2_000L
+        internal const val FRESH_ENTRY_COALESCE_WINDOW_MS = 5_000L
         private val mainHandler = Handler(Looper.getMainLooper())
 
         @Volatile
         private var activeService: EtaAssistantOverlayService? = null
+
+        fun hasFreshVisibleEntry(nowUptimeMs: Long = SystemClock.uptimeMillis()): Boolean =
+            activeService?.isFreshVisibleEntry(nowUptimeMs) == true
+
+        internal fun shouldCoalesceFreshEntry(
+            hasWindow: Boolean,
+            isDetaching: Boolean,
+            isDismissing: Boolean,
+            hiddenForForegroundOperation: Boolean,
+            handoffInProgress: Boolean,
+            handoffExitRequested: Boolean,
+            hasActiveRun: Boolean,
+            hasMessages: Boolean,
+            entryShownUptimeMs: Long,
+            nowUptimeMs: Long,
+            coalesceWindowMs: Long = FRESH_ENTRY_COALESCE_WINDOW_MS,
+        ): Boolean {
+            if (!hasWindow || isDetaching || isDismissing) return false
+            if (hiddenForForegroundOperation || handoffInProgress || handoffExitRequested) return false
+            if (hasActiveRun || hasMessages) return false
+            if (entryShownUptimeMs <= 0L) return false
+            return nowUptimeMs - entryShownUptimeMs in 0L..coalesceWindowMs
+        }
 
         /**
          * Eta 自己拥有入口浮层，直接关闭并等待具体 View detach；不能按包名猜测，

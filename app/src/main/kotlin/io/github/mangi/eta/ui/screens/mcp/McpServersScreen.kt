@@ -23,7 +23,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Hub
@@ -68,6 +67,7 @@ import io.github.mangi.eta.agent.mcp.McpServerManager
 import io.github.mangi.eta.agent.mcp.validateMcpEndpoint
 import io.github.mangi.eta.data.model.AppearanceUiStyle
 import io.github.mangi.eta.data.model.McpAuthorizationType
+import io.github.mangi.eta.data.model.McpDiscoveryTruncation
 import io.github.mangi.eta.data.model.McpProtocolMode
 import io.github.mangi.eta.data.model.McpServerSetting
 import io.github.mangi.eta.data.model.McpToolDefinition
@@ -77,6 +77,7 @@ import io.github.mangi.eta.ui.components.EtaPreferenceGroupItem
 import io.github.mangi.eta.ui.components.ListEmptyState
 import io.github.mangi.eta.ui.components.MiuixDialogActions
 import io.github.mangi.eta.ui.components.MiuixScaffoldPage
+import io.github.mangi.eta.ui.components.MiuixTopBarActionButton
 import io.github.mangi.eta.ui.components.coui.CouiButton
 import io.github.mangi.eta.ui.components.coui.CouiButtonRole
 import io.github.mangi.eta.ui.components.coui.CouiConfirmDialog
@@ -90,6 +91,8 @@ import io.github.mangi.eta.ui.components.coui.CouiSectionTitle
 import io.github.mangi.eta.ui.components.coui.CouiSwitchPreference
 import io.github.mangi.eta.ui.components.coui.CouiTextField
 import io.github.mangi.eta.ui.components.coui.CouiTopAppBarIconButton
+import io.github.mangi.eta.ui.components.currentGlassOverlayBackdrop
+import io.github.mangi.eta.ui.components.glassOverlayTextFieldColors
 import io.github.mangi.eta.ui.markdown.MarkdownTone
 import io.github.mangi.eta.ui.markdown.StaticMarkdown
 import io.github.mangi.eta.ui.navigation.AppRoute
@@ -101,16 +104,18 @@ import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.BasicComponentDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.glass.GlassDialog
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.glass.Add
+import top.yukonga.miuix.kmp.icon.glass.Refresh
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.window.WindowDialog
 
 @Composable
 internal fun McpServersScreen(
@@ -185,9 +190,14 @@ internal fun McpServersScreen(
                     url = ""
                     token = ""
                     error = null
+                    val messageRes = if (it.toolsTruncationReason != null) {
+                        R.string.mcp_server_added_truncated
+                    } else {
+                        R.string.mcp_server_added
+                    }
                     Toast.makeText(
                         context,
-                        resources.getString(R.string.mcp_server_added, it.tools.size),
+                        resources.getString(messageRes, it.tools.size),
                         Toast.LENGTH_SHORT,
                     ).show()
                 }.onFailure {
@@ -204,7 +214,7 @@ internal fun McpServersScreen(
                 onBack = onBack,
                 actions = {
                     CouiTopAppBarIconButton(
-                        icon = CouiIcons.Add,
+                        icon = CouiIcons.Outlined.Add,
                         contentDescription = stringResource(R.string.mcp_add_server),
                         onClick = { showAdd = true },
                     )
@@ -236,10 +246,15 @@ internal fun McpServersScreen(
                         )
                     } else {
                         servers.forEachIndexed { index, server ->
+                            val summaryRes = if (server.toolsTruncationReason != null) {
+                                R.string.mcp_server_row_summary_truncated
+                            } else {
+                                R.string.mcp_server_row_summary
+                            }
                             CouiPreference(
                                 title = server.name,
                                 summary = stringResource(
-                                    R.string.mcp_server_row_summary,
+                                    summaryRes,
                                     server.activeTools.size,
                                     server.tools.size,
                                 ),
@@ -308,11 +323,77 @@ internal fun McpServersScreen(
                 title = stringResource(R.string.route_mcp_servers),
                 onBack = onBack,
                 actions = {
-                    IconButton(onClick = { showAdd = true }) {
-                        Icon(
-                            imageVector = Icons.Rounded.Add,
-                            contentDescription = stringResource(R.string.mcp_add_server),
-                        )
+                    MiuixTopBarActionButton(
+                        icon = MiuixIcons.Glass.Add,
+                        contentDescription = stringResource(R.string.mcp_add_server),
+                        onClick = { showAdd = true },
+                    )
+                },
+                overlay = {
+                    GlassDialog(
+                        show = showAdd,
+                        backdrop = currentGlassOverlayBackdrop(),
+                        title = stringResource(R.string.mcp_add_server),
+                        onDismissRequest = { if (!working) showAdd = false },
+                    ) {
+                        Column(modifier = Modifier.fillMaxWidth().heightIn(max = 520.dp)) {
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f, fill = false)
+                                    .verticalScroll(rememberScrollState()),
+                            ) {
+                                TextField(
+                                    value = name,
+                                    onValueChange = { name = it },
+                                    label = stringResource(R.string.mcp_server_name),
+                                    colors = glassOverlayTextFieldColors(),
+                                    singleLine = true,
+                                    enabled = !working,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                TextField(
+                                    value = url,
+                                    onValueChange = { url = it },
+                                    label = stringResource(R.string.mcp_server_url),
+                                    colors = glassOverlayTextFieldColors(),
+                                    singleLine = true,
+                                    enabled = !working,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                TextField(
+                                    value = token,
+                                    onValueChange = { token = it },
+                                    label = stringResource(R.string.mcp_bearer_optional),
+                                    colors = glassOverlayTextFieldColors(),
+                                    singleLine = true,
+                                    enabled = !working,
+                                    visualTransformation = PasswordVisualTransformation(),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                error?.let {
+                                    Text(
+                                        text = it,
+                                        style = MiuixTheme.textStyles.body2,
+                                        color = MiuixTheme.colorScheme.error,
+                                    )
+                                }
+                            }
+                            MiuixDialogActions(
+                                modifier = Modifier.padding(top = 16.dp),
+                                confirmText = if (working) {
+                                    stringResource(R.string.mcp_connecting)
+                                } else {
+                                    stringResource(R.string.mcp_add_server)
+                                },
+                                confirmEnabled = !working,
+                                onCancel = { showAdd = false },
+                                onConfirm = onConfirmAdd,
+                            )
+                        }
                     }
                 },
             ) {
@@ -352,10 +433,15 @@ internal fun McpServersScreen(
                             )
                         } else {
                             servers.forEach { server ->
+                                val summaryRes = if (server.toolsTruncationReason != null) {
+                                    R.string.mcp_server_row_summary_truncated
+                                } else {
+                                    R.string.mcp_server_row_summary
+                                }
                                 ArrowPreference(
                                     title = server.name,
                                     summary = stringResource(
-                                        R.string.mcp_server_row_summary,
+                                        summaryRes,
                                         server.activeTools.size,
                                         server.tools.size,
                                     ),
@@ -364,68 +450,6 @@ internal fun McpServersScreen(
                             }
                         }
                     }
-                }
-            }
-
-            WindowDialog(
-                show = showAdd,
-                title = stringResource(R.string.mcp_add_server),
-                onDismissRequest = { if (!working) showAdd = false },
-            ) {
-                Column(modifier = Modifier.fillMaxWidth().heightIn(max = 520.dp)) {
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f, fill = false)
-                            .verticalScroll(rememberScrollState()),
-                    ) {
-                        TextField(
-                            value = name,
-                            onValueChange = { name = it },
-                            label = stringResource(R.string.mcp_server_name),
-                            singleLine = true,
-                            enabled = !working,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        TextField(
-                            value = url,
-                            onValueChange = { url = it },
-                            label = stringResource(R.string.mcp_server_url),
-                            singleLine = true,
-                            enabled = !working,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        TextField(
-                            value = token,
-                            onValueChange = { token = it },
-                            label = stringResource(R.string.mcp_bearer_optional),
-                            singleLine = true,
-                            enabled = !working,
-                            visualTransformation = PasswordVisualTransformation(),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        error?.let {
-                            Text(
-                                text = it,
-                                style = MiuixTheme.textStyles.body2,
-                                color = MiuixTheme.colorScheme.error,
-                            )
-                        }
-                    }
-                    MiuixDialogActions(
-                        modifier = Modifier.padding(top = 16.dp),
-                        confirmText = if (working) {
-                            stringResource(R.string.mcp_connecting)
-                        } else {
-                            stringResource(R.string.mcp_add_server)
-                        },
-                        confirmEnabled = !working,
-                        onCancel = { showAdd = false },
-                        onConfirm = onConfirmAdd,
-                    )
                 }
             }
         }
@@ -533,7 +557,14 @@ internal fun McpServerDetailScreen(
             Toast.makeText(
                 context,
                 result.fold(
-                    onSuccess = { resources.getString(R.string.mcp_refreshed, it.tools.size) },
+                    onSuccess = {
+                        val messageRes = if (it.toolsTruncationReason != null) {
+                            R.string.mcp_refreshed_truncated
+                        } else {
+                            R.string.mcp_refreshed
+                        }
+                        resources.getString(messageRes, it.tools.size)
+                    },
                     onFailure = { it.message ?: resources.getString(R.string.mcp_refresh_failed) },
                 ),
                 Toast.LENGTH_SHORT,
@@ -589,7 +620,11 @@ internal fun McpServerDetailScreen(
                 val allEnabled = server.tools.isNotEmpty() && enabledCount == server.tools.size
                 item(key = "tools-header") {
                     CouiSectionTitle(
-                        text = "${stringResource(R.string.mcp_tools_count, server.tools.size)} · 已启用 $enabledCount",
+                        text = stringResource(
+                            R.string.ui_misc_mcp_tools_enabled_header,
+                            stringResource(R.string.mcp_tools_count, server.tools.size),
+                            enabledCount,
+                        ),
                         trailing = {
                             if (server.tools.isNotEmpty()) {
                                 GroupBatchTogglePill(
@@ -599,6 +634,19 @@ internal fun McpServerDetailScreen(
                             }
                         },
                     )
+                }
+
+                server.toolsTruncationReason?.let { reason ->
+                    item(key = "tools-truncated") {
+                        Group {
+                            CouiPreference(
+                                title = stringResource(R.string.mcp_tools_truncated_title, server.tools.size),
+                                summary = stringResource(reason.summaryRes()),
+                                titleColor = dialogColors.destructive,
+                                showChevron = false,
+                            )
+                        }
+                    }
                 }
 
                 if (server.tools.isEmpty()) {
@@ -692,13 +740,75 @@ internal fun McpServerDetailScreen(
                 title = server?.name ?: stringResource(R.string.route_mcp_server_detail),
                 onBack = onBack,
                 actions = {
-                    IconButton(
+                    MiuixTopBarActionButton(
+                        icon = MiuixIcons.Glass.Refresh,
+                        contentDescription = stringResource(R.string.mcp_refresh_tools),
                         enabled = server != null && !working,
                         onClick = onRefresh,
+                    )
+                },
+                overlay = {
+                    val overlayBackdrop = currentGlassOverlayBackdrop()
+                    GlassDialog(
+                        show = showToken,
+                        backdrop = overlayBackdrop,
+                        title = stringResource(R.string.mcp_update_token),
+                        summary = stringResource(R.string.mcp_update_token_summary),
+                        onDismissRequest = { showToken = false },
                     ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Refresh,
-                            contentDescription = stringResource(R.string.mcp_refresh_tools),
+                        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            TextField(
+                                value = token,
+                                onValueChange = { token = it },
+                                label = stringResource(R.string.mcp_bearer_token),
+                                colors = glassOverlayTextFieldColors(),
+                                singleLine = true,
+                                visualTransformation = PasswordVisualTransformation(),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            MiuixDialogActions(
+                                confirmText = stringResource(R.string.action_save),
+                                onCancel = { showToken = false },
+                                onConfirm = {
+                                    server?.let { current ->
+                                        scope.launch(Dispatchers.IO) {
+                                            McpServerRepository.update(
+                                                current.copy(
+                                                    authorizationType = if (token.isBlank()) {
+                                                        McpAuthorizationType.NONE
+                                                    } else {
+                                                        McpAuthorizationType.BEARER
+                                                    },
+                                                ),
+                                                bearerToken = token,
+                                            )
+                                        }
+                                        token = ""
+                                        showToken = false
+                                    }
+                                },
+                            )
+                        }
+                    }
+
+                    GlassDialog(
+                        show = showDelete,
+                        backdrop = overlayBackdrop,
+                        title = stringResource(R.string.mcp_delete_server),
+                        summary = stringResource(R.string.mcp_delete_confirm, server?.name.orEmpty()),
+                        onDismissRequest = { showDelete = false },
+                    ) {
+                        MiuixDialogActions(
+                            confirmText = stringResource(R.string.ui_delete_3755f5),
+                            destructive = true,
+                            onCancel = { showDelete = false },
+                            onConfirm = {
+                                scope.launch {
+                                    withContext(Dispatchers.IO) { McpServerRepository.delete(serverId) }
+                                    onBack()
+                                }
+                            },
                         )
                     }
                 },
@@ -746,12 +856,34 @@ internal fun McpServerDetailScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Box(modifier = Modifier.weight(1f)) {
-                            SmallTitle("${stringResource(R.string.mcp_tools_count, server.tools.size)} · 已启用 $enabledCount")
+                            SmallTitle(
+                                stringResource(
+                                    R.string.ui_misc_mcp_tools_enabled_header,
+                                    stringResource(R.string.mcp_tools_count, server.tools.size),
+                                    enabledCount,
+                                ),
+                            )
                         }
                         if (server.tools.isNotEmpty()) {
                             GroupBatchTogglePill(
                                 allEnabled = allEnabled,
                                 onToggleAll = { onToggleAllTools(!allEnabled) },
+                            )
+                        }
+                    }
+                }
+
+                server.toolsTruncationReason?.let { reason ->
+                    item(key = "tools-truncated") {
+                        Card(
+                            modifier = Modifier
+                                .padding(horizontal = 12.dp)
+                                .padding(bottom = 12.dp),
+                        ) {
+                            BasicComponent(
+                                title = stringResource(R.string.mcp_tools_truncated_title, server.tools.size),
+                                titleColor = BasicComponentDefaults.titleColor(color = MiuixTheme.colorScheme.error),
+                                summary = stringResource(reason.summaryRes()),
                             )
                         }
                     }
@@ -803,66 +935,6 @@ internal fun McpServerDetailScreen(
                         )
                     }
                 }
-            }
-
-            WindowDialog(
-                show = showToken,
-                title = stringResource(R.string.mcp_update_token),
-                summary = stringResource(R.string.mcp_update_token_summary),
-                onDismissRequest = { showToken = false },
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    TextField(
-                        value = token,
-                        onValueChange = { token = it },
-                        label = stringResource(R.string.mcp_bearer_token),
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    MiuixDialogActions(
-                        confirmText = stringResource(R.string.action_save),
-                        onCancel = { showToken = false },
-                        onConfirm = {
-                            server?.let { current ->
-                                scope.launch(Dispatchers.IO) {
-                                    McpServerRepository.update(
-                                        current.copy(
-                                            authorizationType = if (token.isBlank()) {
-                                                McpAuthorizationType.NONE
-                                            } else {
-                                                McpAuthorizationType.BEARER
-                                            },
-                                        ),
-                                        bearerToken = token,
-                                    )
-                                }
-                                token = ""
-                                showToken = false
-                            }
-                        },
-                    )
-                }
-            }
-
-            WindowDialog(
-                show = showDelete,
-                title = stringResource(R.string.mcp_delete_server),
-                summary = stringResource(R.string.mcp_delete_confirm, server?.name.orEmpty()),
-                onDismissRequest = { showDelete = false },
-            ) {
-                MiuixDialogActions(
-                    confirmText = stringResource(R.string.ui_delete_3755f5),
-                    destructive = true,
-                    onCancel = { showDelete = false },
-                    onConfirm = {
-                        scope.launch {
-                            withContext(Dispatchers.IO) { McpServerRepository.delete(serverId) }
-                            onBack()
-                        }
-                    },
-                )
             }
         }
     }
@@ -936,7 +1008,7 @@ private fun McpToolSwitchRow(
                     Column(modifier = Modifier.weight(1f)) {
                         CouiText(
                             text = displayTitle,
-                            kind = CouiTextKind.PreferenceTitle,
+                            kind = CouiTextKind.ItemTitle,
                             color = colors.title,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -944,7 +1016,7 @@ private fun McpToolSwitchRow(
                         if (showRawName) {
                             CouiText(
                                 text = tool.name,
-                                kind = CouiTextKind.Description,
+                                kind = CouiTextKind.GroupFooter,
                                 color = colors.summary.copy(alpha = 0.75f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
@@ -1017,8 +1089,10 @@ private fun McpToolSwitchRow(
                         horizontalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
                         CouiText(
-                            text = if (expanded) "收起说明" else "展开说明",
-                            kind = CouiTextKind.Description,
+                            text = stringResource(
+                                if (expanded) R.string.ui_misc_collapse_description else R.string.ui_misc_expand_description,
+                            ),
+                            kind = CouiTextKind.GroupFooter,
                             color = colors.accent,
                         )
                         CouiIcon(
@@ -1133,7 +1207,9 @@ private fun McpToolSwitchRow(
                         horizontalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
                         Text(
-                            text = if (expanded) "收起说明" else "展开说明",
+                            text = stringResource(
+                                if (expanded) R.string.ui_misc_collapse_description else R.string.ui_misc_expand_description,
+                            ),
                             style = MiuixTheme.textStyles.footnote1.copy(
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium,
@@ -1169,3 +1245,10 @@ internal fun collapseDescriptionPreview(raw: String): String =
         }
         .filter { it.isNotEmpty() }
         .joinToString(" · ")
+
+private fun McpDiscoveryTruncation.summaryRes(): Int = when (this) {
+    McpDiscoveryTruncation.TOOL_LIMIT -> R.string.mcp_tools_truncated_tool_limit
+    McpDiscoveryTruncation.PAGE_LIMIT -> R.string.mcp_tools_truncated_page_limit
+    McpDiscoveryTruncation.SIZE_LIMIT -> R.string.mcp_tools_truncated_size_limit
+    McpDiscoveryTruncation.CURSOR_LOOP -> R.string.mcp_tools_truncated_cursor_loop
+}
