@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
@@ -19,8 +20,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import com.itos.coui.layout.CouiPageDefaults
-import com.itos.coui.layout.Group
 import io.github.mangi.eta.R
 import io.github.mangi.eta.data.model.AppearanceUiStyle
 import io.github.mangi.eta.ui.app.CharacterLibraryStore
@@ -30,10 +29,13 @@ import io.github.mangi.eta.ui.components.MiuixTopBarActionButton
 import io.github.mangi.eta.ui.components.coui.CouiButton
 import io.github.mangi.eta.ui.components.coui.CouiButtonRole
 import io.github.mangi.eta.ui.components.coui.CouiLazyScaffoldPage
+import io.github.mangi.eta.ui.components.coui.CouiPageDefaults
 import io.github.mangi.eta.ui.components.coui.CouiPreference
+import io.github.mangi.eta.ui.components.coui.CouiPreferenceGroup
 import io.github.mangi.eta.ui.components.coui.CouiSectionTitle
 import io.github.mangi.eta.ui.components.coui.CouiTextField
 import io.github.mangi.eta.ui.components.coui.CouiTopAppBarIconButton
+import io.github.mangi.eta.ui.components.rememberDraftTextFieldState
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
@@ -137,12 +139,14 @@ internal fun CharacterEditorScreen(
                 val advancedTitle = stringResource(R.string.character_editor_advanced_title)
                 val advancedSummary = stringResource(R.string.character_editor_advanced_summary)
                 if (uiStyle == AppearanceUiStyle.COUI) {
-                    Group {
-                        CouiPreference(
-                            title = advancedTitle,
-                            summary = advancedSummary,
-                            onClick = { advanced = !advanced },
-                        )
+                    CouiPreferenceGroup {
+                        item {
+                            CouiPreference(
+                                title = advancedTitle,
+                                summary = advancedSummary,
+                                onClick = { advanced = !advanced },
+                            )
+                        }
                     }
                 } else {
                     Card(
@@ -218,7 +222,7 @@ internal fun CharacterEditorScreen(
                         onClick = { store.saveEditor(onSaved) },
                     )
                 },
-                content = listContent,
+                content = { listContent() },
             )
         }
         AppearanceUiStyle.MIUIX -> {
@@ -250,6 +254,7 @@ internal fun CharacterTextField(
     minLines: Int = 2,
     inGroup: Boolean = false,
 ) {
+    val fieldState = rememberDraftTextFieldState(value, onChange)
     when (LocalUiStyle.current) {
         AppearanceUiStyle.COUI -> {
             val fieldContent: @Composable () -> Unit = {
@@ -259,8 +264,7 @@ internal fun CharacterTextField(
                         .padding(horizontal = CouiPageDefaults.rowPadding, vertical = 8.dp),
                 ) {
                     CouiTextField(
-                        value = value,
-                        onValueChange = onChange,
+                        state = fieldState,
                         label = label,
                         enabled = enabled,
                         singleLine = singleLine,
@@ -272,21 +276,20 @@ internal fun CharacterTextField(
             if (inGroup) {
                 fieldContent()
             } else {
-                Group {
-                    fieldContent()
+                CouiPreferenceGroup {
+                    item {
+                        fieldContent()
+                    }
                 }
             }
         }
         AppearanceUiStyle.MIUIX -> {
             TextField(
-                value = value,
-                onValueChange = onChange,
+                state = fieldState,
+                lineLimits = if (singleLine) TextFieldLineLimits.SingleLine else TextFieldLineLimits.MultiLine(minHeightInLines = minLines),
                 label = label,
                 useLabelAsPlaceholder = !singleLine,
                 enabled = enabled,
-                singleLine = singleLine,
-                minLines = if (singleLine) 1 else minLines,
-                maxLines = if (singleLine) 1 else Int.MAX_VALUE,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
             )
         }

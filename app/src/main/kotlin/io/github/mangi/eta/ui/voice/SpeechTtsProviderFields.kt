@@ -2,7 +2,6 @@ package io.github.mangi.eta.ui.voice
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
-import com.itos.coui.layout.Divider
 import io.github.mangi.eta.R
 import io.github.mangi.eta.data.model.AppearanceUiStyle
 import io.github.mangi.eta.data.model.GeminiTtsModel
@@ -10,9 +9,11 @@ import io.github.mangi.eta.data.model.MiniMaxTtsModel
 import io.github.mangi.eta.data.model.SpeechCredentialField
 import io.github.mangi.eta.data.model.TtsProvider
 import io.github.mangi.eta.ui.app.LocalUiStyle
+import io.github.mangi.eta.ui.components.SettingsTextField
 import io.github.mangi.eta.ui.components.coui.CouiDropdownPreference
 import io.github.mangi.eta.ui.components.coui.CouiSwitchPreference
 import io.github.mangi.eta.ui.components.currentGlassOverlayBackdrop
+import io.github.mangi.eta.ui.components.coui.CouiCardDivider as CouiDivider
 import top.yukonga.miuix.kmp.glass.GlassDropdownPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 
@@ -42,7 +43,7 @@ internal fun GeminiConnectionSection(store: SpeechSettingsStore) {
                         }
                     },
                 )
-                Divider()
+                CouiDivider()
             }
             AppearanceUiStyle.MIUIX -> {
                 GlassDropdownPreference(
@@ -87,7 +88,7 @@ internal fun MiniMaxConnectionSection(store: SpeechSettingsStore) {
                         }
                     },
                 )
-                Divider()
+                CouiDivider()
             }
             AppearanceUiStyle.MIUIX -> {
                 GlassDropdownPreference(
@@ -143,7 +144,7 @@ internal fun SpeechDeliveryFields(store: SpeechSettingsStore) {
             val settings = store.settings
             val mimo = settings.tts == TtsProvider.MIMO
             SpeechFieldColumn {
-                SpeechField(
+                SettingsTextField(
                     label = stringResource(R.string.speech_style),
                     value = if (mimo) settings.mimoTts.style else settings.geminiTts.style,
                     singleLine = false,
@@ -163,7 +164,7 @@ internal fun SpeechDeliveryFields(store: SpeechSettingsStore) {
             val items = speeds.map { "$it×" }
             when (LocalUiStyle.current) {
                 AppearanceUiStyle.COUI -> {
-                    Divider()
+                    CouiDivider()
                     CouiDropdownPreference(
                         title = stringResource(R.string.speech_speed),
                         items = items,
@@ -197,7 +198,7 @@ internal fun SpeechDeliveryFields(store: SpeechSettingsStore) {
             }
             when (LocalUiStyle.current) {
                 AppearanceUiStyle.COUI -> {
-                    Divider()
+                    CouiDivider()
                     CouiSwitchPreference(
                         title = stringResource(R.string.speech_filter_markdown),
                         checked = config.filterMarkdown,

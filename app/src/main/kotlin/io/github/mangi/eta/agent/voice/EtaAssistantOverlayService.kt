@@ -29,6 +29,9 @@ import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import android.window.OnBackInvokedCallback
 import android.window.OnBackInvokedDispatcher
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.clearText
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
@@ -58,14 +61,13 @@ import io.github.mangi.eta.core.AndroidAgentLogger
 import io.github.mangi.eta.data.model.AppearanceSettings
 import io.github.mangi.eta.data.repository.AppearanceSettingsRepository
 import io.github.mangi.eta.ui.MainActivity
+import io.github.mangi.eta.ui.conversationHandoffStartMode
 import io.github.mangi.eta.ui.app.AgentAppTheme
 import io.github.mangi.eta.ui.app.AgentRunEventCoalescer
 import io.github.mangi.eta.ui.app.AgentRunMessageProjector
 import io.github.mangi.eta.ui.model.AgentChatMessageUi
 import io.github.mangi.eta.ui.model.AgentMessageUi
 import io.github.mangi.eta.ui.model.SystemNoticeCode
-import io.github.mangi.eta.ui.model.ThinkingMessageUi
-import io.github.mangi.eta.ui.model.ToolActivityMessageUi
 import io.github.mangi.eta.ui.model.UserMessageUi
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
@@ -144,7 +146,7 @@ internal class EtaAssistantOverlayService : Service(), LifecycleOwner, SavedStat
     private var hiddenForForegroundOperation = false
     private var handoffInProgress by mutableStateOf(false)
     private var handoffExitRequested by mutableStateOf(false)
-    private var inputText by mutableStateOf("")
+    private val inputText = TextFieldState()
     private var inputFocusRequestKey by mutableIntStateOf(-1)
     private var uiState by mutableStateOf(EtaVoiceUiState())
 
@@ -173,7 +175,9 @@ internal class EtaAssistantOverlayService : Service(), LifecycleOwner, SavedStat
         scope.launch(Dispatchers.Main.immediate) {
             speechInput.state.collect { state ->
                 speechLevel = state.level
-                if (state.preview.isNotBlank()) inputText = state.preview
+                if (state.preview.isNotBlank() && state.preview != inputText.text.toString()) {
+                    inputText.setTextAndPlaceCursorAtEnd(state.preview)
+                }
                 speechState = EtaSpeechState(
                     phase = state.phase,
                     // 连接、聆听、识别中的阶段播报由语音条目与波形承担，反馈条只保留错误提示，
@@ -246,7 +250,7 @@ internal class EtaAssistantOverlayService : Service(), LifecycleOwner, SavedStat
         entryEntranceComplete = false
         entryContentReady = false
         inputFocusRequestKey = -1
-        inputText = ""
+        inputText.clearText()
         uiState = EtaVoiceUiState()
         hiddenForForegroundOperation = false
         handoffInProgress = false
@@ -314,7 +318,7 @@ internal class EtaAssistantOverlayService : Service(), LifecycleOwner, SavedStat
             return
         }
         inputFocusRequestKey = -1
-        inputText = ""
+        inputText.clearText()
         updateSoftInput(visible = false)
         windowView?.let { view ->
             (getSystemService(INPUT_METHOD_SERVICE) as? InputMethodManager)
@@ -348,7 +352,7 @@ internal class EtaAssistantOverlayService : Service(), LifecycleOwner, SavedStat
                 .collectAsState(initial = AppearanceSettings())
             AgentAppTheme(
                 appearance = appearance,
-                applyInterfaceScale = false,
+                systemOverlay = true,
             ) {
                 // ColorOS 在 Overlay 窗口切换期间可能短暂使用软件画布；RuntimeShader
                 // 无法在该画布绘制，因此浮窗统一使用 Miuix 的圆角回退路径。
@@ -390,8 +394,7 @@ internal class EtaAssistantOverlayService : Service(), LifecycleOwner, SavedStat
                         onKeyboard = ::switchToKeyboard,
                         input = inputText,
                         inputFocusRequestKey = inputFocusRequestKey,
-                        onInputChange = {
-                            inputText = it
+                        onInputEdited = {
                             if (!speechState.active && speechState.hasFeedback) {
                                 speechState = EtaSpeechState()
                             }
@@ -411,13 +414,16 @@ internal class EtaAssistantOverlayService : Service(), LifecycleOwner, SavedStat
                 }
             }
         }
+        // 窗口由 Service 通过 WindowManager 挂载，Activity.setShowWhenLocked 无法作用于该窗口。
+        @Suppress("DEPRECATION")
+        val showWhenLocked = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED or
+            WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                showWhenLocked or
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
                 WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS,
@@ -489,7 +495,7 @@ internal class EtaAssistantOverlayService : Service(), LifecycleOwner, SavedStat
     }
 
     private fun submitInput() {
-        val prompt = inputText.trim()
+        val prompt = inputText.text.toString().trim()
         if (prompt.isBlank() || activeRunId != null) return
         submitPrompt(prompt)
     }
@@ -505,7 +511,7 @@ internal class EtaAssistantOverlayService : Service(), LifecycleOwner, SavedStat
         speechState = EtaSpeechState()
         playback.stop()
         val capture = entryScreenContext
-        inputText = ""
+        inputText.clearText()
         activeRunId = UUID.randomUUID().toString()
         val runId = activeRunId ?: return
         uiState = uiState.copy(
@@ -839,12 +845,7 @@ internal class EtaAssistantOverlayService : Service(), LifecycleOwner, SavedStat
             )
         val creatorOptions = ActivityOptions.makeBasic().apply {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
-                pendingIntentCreatorBackgroundActivityStartMode =
-                    if (Build.VERSION.SDK_INT >= 36) {
-                        ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_IF_VISIBLE
-                    } else {
-                        ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
-                    }
+                pendingIntentCreatorBackgroundActivityStartMode = conversationHandoffStartMode()
             }
         }
         val pendingIntent = PendingIntent.getActivity(
@@ -855,14 +856,7 @@ internal class EtaAssistantOverlayService : Service(), LifecycleOwner, SavedStat
             creatorOptions.toBundle(),
         )
         val senderOptions = ActivityOptions.makeBasic().apply {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                pendingIntentBackgroundActivityStartMode =
-                    if (Build.VERSION.SDK_INT >= 36) {
-                        ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_IF_VISIBLE
-                    } else {
-                        ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
-                    }
-            }
+            pendingIntentBackgroundActivityStartMode = conversationHandoffStartMode()
         }
         runCatching { pendingIntent.send(this, 0, null, null, null, null, senderOptions.toBundle()) }
             .onFailure {

@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -29,10 +28,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -42,19 +39,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.itos.coui.effect.couiButtonFeedback
-import com.itos.coui.icons.CouiIcons
-import com.itos.coui.input.CouiHapticFeedback
-import com.itos.coui.input.performCouiHapticFeedback
-import com.itos.coui.layout.CouiPageDefaults
-import com.itos.coui.layout.Divider
-import com.itos.coui.layout.Footer
-import com.itos.coui.layout.Group
-import com.itos.coui.switch.CouiSwitchDefaults
-import com.itos.coui.switch.Switch as CouiSwitch
-import com.itos.coui.text.CouiTextKind
-import com.itos.coui.text.Text as CouiText
-import com.itos.coui.theme.CouiTheme
 import io.github.mangi.eta.R
 import io.github.mangi.eta.agent.scheduler.ScheduledTaskHealthChecker
 import io.github.mangi.eta.agent.scheduler.ScheduledTaskHealthSnapshot
@@ -66,21 +50,29 @@ import io.github.mangi.eta.data.model.ScheduledTaskPreset
 import io.github.mangi.eta.data.model.ScheduledTaskPresets
 import io.github.mangi.eta.data.repository.ScheduledTaskRepository
 import io.github.mangi.eta.ui.app.LocalUiStyle
-import io.github.mangi.eta.ui.components.EtaPreferenceGroupItem
 import io.github.mangi.eta.ui.components.MiuixScaffoldPage
 import io.github.mangi.eta.ui.components.MiuixTopBarActionButton
 import io.github.mangi.eta.ui.components.coui.CouiButton
 import io.github.mangi.eta.ui.components.coui.CouiButtonRole
 import io.github.mangi.eta.ui.components.coui.CouiLazyScaffoldPage
 import io.github.mangi.eta.ui.components.coui.CouiPageBottomSpacer
+import io.github.mangi.eta.ui.components.coui.CouiPageDefaults
 import io.github.mangi.eta.ui.components.coui.CouiPreference
+import io.github.mangi.eta.ui.components.coui.CouiPreferenceFooter
+import io.github.mangi.eta.ui.components.coui.CouiPreferenceGroup
 import io.github.mangi.eta.ui.components.coui.CouiSectionTitle
+import io.github.mangi.eta.ui.components.coui.CouiText
+import io.github.mangi.eta.ui.components.coui.CouiTextKind
 import io.github.mangi.eta.ui.components.coui.CouiTopAppBarIconButton
+import io.github.mangi.eta.ui.components.coui.couiButtonFeedback
 import io.github.mangi.eta.ui.navigation.AppRoute
+import io.github.suqi8.coui.kmp.icon.COUIIcons
+import io.github.suqi8.coui.kmp.icon.extended.Add
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.BasicComponent
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Switch
@@ -90,6 +82,8 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.glass.Add
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import io.github.suqi8.coui.kmp.basic.Switch as CouiSwitch
+import io.github.suqi8.coui.kmp.theme.COUITheme as CouiTheme
 
 @Composable
 internal fun ScheduledTasksScreen(
@@ -142,13 +136,12 @@ internal fun ScheduledTasksScreen(
 
     when (LocalUiStyle.current) {
         AppearanceUiStyle.COUI -> {
-            val colors = CouiPageDefaults.themeColors()
             CouiLazyScaffoldPage(
                 title = title,
                 onBack = onBack,
                 actions = {
                     CouiTopAppBarIconButton(
-                        icon = CouiIcons.Outlined.Add,
+                        icon = COUIIcons.Add,
                         contentDescription = createLabel,
                         onClick = { onNavigate(AppRoute.ScheduledTaskEditor()) },
                     )
@@ -164,18 +157,19 @@ internal fun ScheduledTasksScreen(
                 }
                 if (tasks.isEmpty()) {
                     item(key = "presets_group") {
-                        Group(title = stringResource(R.string.scheduled_section_quick_start)) {
+                        CouiPreferenceGroup(title = stringResource(R.string.scheduled_section_quick_start)) {
                             ScheduledTaskPresets.all.forEachIndexed { index, preset ->
-                                if (index > 0) Divider()
-                                CouiPresetRow(
-                                    preset = preset,
-                                    onClick = { onNavigate(AppRoute.ScheduledTaskEditor(presetId = preset.id)) },
-                                )
+                                item {
+                                    CouiPresetRow(
+                                        preset = preset,
+                                        onClick = { onNavigate(AppRoute.ScheduledTaskEditor(presetId = preset.id)) },
+                                    )
+                                }
                             }
                         }
                     }
                     item(key = "empty_hint") {
-                        Footer(
+                        CouiPreferenceFooter(
                             text = stringResource(R.string.scheduled_empty_hint),
                         )
                     }
@@ -281,28 +275,30 @@ private fun CouiHealthBannerCard(
 ) {
     val colors = CouiPageDefaults.themeColors()
     val (title, summary, actionText) = healthGuidance(health)
-    Group {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = CouiPageDefaults.rowPadding, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            CouiText(
-                text = title,
-                kind = CouiTextKind.ItemTitle,
-                color = colors.title,
-            )
-            CouiText(
-                text = summary,
-                kind = CouiTextKind.ItemSummary,
-                color = colors.summary,
-            )
-            CouiButton(
-                text = actionText,
-                role = CouiButtonRole.Secondary,
-                onClick = onFix,
-            )
+    CouiPreferenceGroup {
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = CouiPageDefaults.rowPadding, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                CouiText(
+                    text = title,
+                    kind = CouiTextKind.ItemTitle,
+                    color = colors.title,
+                )
+                CouiText(
+                    text = summary,
+                    kind = CouiTextKind.ItemSummary,
+                    color = colors.summary,
+                )
+                CouiButton(
+                    text = actionText,
+                    role = CouiButtonRole.Secondary,
+                    onClick = onFix,
+                )
+            }
         }
     }
 }
@@ -316,7 +312,8 @@ private fun MiuixHealthBannerCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 12.dp)
+            .padding(top = 8.dp, bottom = 12.dp),
     ) {
         Column(
             modifier = Modifier
@@ -339,6 +336,8 @@ private fun MiuixHealthBannerCard(
             TextButton(
                 text = actionText,
                 onClick = onFix,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.textButtonColorsPrimary(),
             )
         }
     }
@@ -366,8 +365,7 @@ private fun CouiScheduledTaskCard(
     onToggle: (Boolean) -> Unit,
 ) {
     val dark = CouiTheme.isDark
-    val colors = CouiPageDefaults.themeColors(dark)
-    val view = LocalView.current
+    val colors = CouiPageDefaults.themeColors()
     val interaction = remember { MutableInteractionSource() }
     val scheduleLine = buildScheduleMetaLine(task, nowMs)
     val statusLine = buildStatusMetaLine(task, isRunning, nowMs)
@@ -377,61 +375,61 @@ private fun CouiScheduledTaskCard(
         autoDisabled = !task.autoDisabledReason.isNullOrBlank(),
     )
 
-    Group {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .couiButtonFeedback(dark, interaction, enabled = true)
-                .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick)
-                .padding(horizontal = CouiPageDefaults.rowPadding, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+    CouiPreferenceGroup {
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .couiButtonFeedback(dark, interaction, enabled = true)
+                    .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick)
+                    .padding(horizontal = CouiPageDefaults.rowPadding, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                CouiText(
-                    text = task.name.ifBlank { stringResource(R.string.scheduled_unnamed_task) },
-                    kind = CouiTextKind.ItemTitle,
-                    color = if (task.enabled) colors.title else colors.summary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                CouiText(
-                    text = scheduleLine,
-                    kind = CouiTextKind.ItemSummary,
-                    color = colors.summary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(7.dp)
-                            .clip(CircleShape)
-                            .background(dotColor),
+                    CouiText(
+                        text = task.name.ifBlank { stringResource(R.string.scheduled_unnamed_task) },
+                        kind = CouiTextKind.ItemTitle,
+                        color = if (task.enabled) colors.title else colors.summary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                     CouiText(
-                        text = statusLine,
+                        text = scheduleLine,
                         kind = CouiTextKind.ItemSummary,
                         color = colors.summary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .clip(CircleShape)
+                                .background(dotColor),
+                        )
+                        CouiText(
+                            text = statusLine,
+                            kind = CouiTextKind.ItemSummary,
+                            color = colors.summary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
+                Spacer(modifier = Modifier.width(12.dp))
+                CouiSwitch(
+                    checked = task.enabled,
+                    onCheckedChange = { next ->
+                        onToggle(next)
+                    },
+                )
             }
-            Spacer(modifier = Modifier.width(12.dp))
-            CouiSwitch(
-                checked = task.enabled,
-                onCheckedChange = { next ->
-                    view.performCouiHapticFeedback(CouiHapticFeedback.Switch)
-                    onToggle(next)
-                },
-                colors = CouiSwitchDefaults.colors(accent = colors.accent, dark = dark),
-            )
         }
     }
 }

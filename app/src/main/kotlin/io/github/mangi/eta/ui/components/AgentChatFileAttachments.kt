@@ -30,6 +30,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.clearText
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Close
@@ -62,27 +65,27 @@ import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import com.itos.coui.menu.CouiMenuItem
-import com.itos.coui.menu.Menu
-import com.itos.coui.menu.couiMenuAnchor
-import com.itos.coui.menu.rememberCouiMenuAnchor
 import io.github.mangi.eta.R
 import io.github.mangi.eta.agent.model.AgentFileReference
 import io.github.mangi.eta.agent.model.AgentFileReferenceKind
 import io.github.mangi.eta.data.model.AppearanceUiStyle
 import io.github.mangi.eta.ui.app.LocalUiStyle
 import io.github.mangi.eta.ui.components.coui.CouiInputDialog
+import io.github.mangi.eta.ui.components.coui.CouiMenu
+import io.github.mangi.eta.ui.components.coui.CouiMenuItem
+import io.github.mangi.eta.ui.components.coui.couiMenuAnchor
+import io.github.mangi.eta.ui.components.coui.rememberCouiMenuAnchor
 import io.github.mangi.eta.ui.model.PendingFileReferenceUi
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.blur.Backdrop
 import top.yukonga.miuix.kmp.glass.GlassDialog
 import top.yukonga.miuix.kmp.glass.GlassPopupDefaults
 import top.yukonga.miuix.kmp.glass.GlassPopupItem
 import top.yukonga.miuix.kmp.glass.GlassPopupSizing
+import top.yukonga.miuix.kmp.glass.GlassTextField
 import top.yukonga.miuix.kmp.glass.GlassTransformPopup
 import top.yukonga.miuix.kmp.glass.glassPopupAnchor
 import top.yukonga.miuix.kmp.glass.glassPopupAnchorContent
@@ -194,7 +197,7 @@ internal fun AgentAttachmentPickerButton(
     val context = LocalContext.current
     var showPopup by remember { mutableStateOf(false) }
     var showPathDialog by remember { mutableStateOf(false) }
-    var pathInput by remember { mutableStateOf("") }
+    val pathInputState = remember { TextFieldState() }
     var buttonTopPx by remember { mutableFloatStateOf(0f) }
     var buttonBottomPx by remember { mutableFloatStateOf(0f) }
     var measuredPopupHeightPx by remember { mutableFloatStateOf(0f) }
@@ -238,7 +241,7 @@ internal fun AgentAttachmentPickerButton(
             1 -> filePicker.launch(arrayOf("*/*"))
             2 -> folderPicker.launch(null)
             3 -> {
-                pathInput = ""
+                pathInputState.clearText()
                 showPathDialog = true
             }
         }
@@ -286,7 +289,7 @@ internal fun AgentAttachmentPickerButton(
                 val menuItems = remember(options) {
                     options.mapIndexed { index, label -> CouiMenuItem(value = index, text = label) }
                 }
-                Menu(
+                CouiMenu(
                     expanded = showPopup,
                     onDismissRequest = { showPopup = false },
                     items = menuItems,
@@ -347,13 +350,12 @@ internal fun AgentAttachmentPickerButton(
                 visible = showPathDialog,
                 title = stringResource(R.string.ui_input_file_path_36d474),
                 message = stringResource(R.string.ui_supports_files_and_folders_under_internal_storage_or_520786),
-                value = pathInput,
-                onValueChange = { pathInput = it },
+                state = pathInputState,
                 placeholder = stringResource(R.string.ui_absolute_path_9ac6fc),
                 confirmText = stringResource(R.string.attachment_add),
-                confirmEnabled = pathInput.trim().startsWith('/'),
+                confirmEnabled = pathInputState.text.toString().trim().startsWith('/'),
                 onConfirm = {
-                    val path = pathInput.trim()
+                    val path = pathInputState.text.toString().trim()
                     showPathDialog = false
                     onAttachFilePath(path)
                 },
@@ -369,22 +371,20 @@ internal fun AgentAttachmentPickerButton(
                 onDismissRequest = { showPathDialog = false },
             ) {
                 Column {
-                    TextField(
-                        value = pathInput,
-                        onValueChange = { pathInput = it },
+                    GlassTextField(
+                        state = pathInputState,
+                        lineLimits = TextFieldLineLimits.SingleLine,
                         label = stringResource(R.string.ui_absolute_path_9ac6fc),
-                        colors = glassOverlayTextFieldColors(),
                         useLabelAsPlaceholder = true,
-                        singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                         modifier = Modifier.fillMaxWidth(),
                     )
                     MiuixDialogActions(
                         confirmText = stringResource(R.string.attachment_add),
-                        confirmEnabled = pathInput.trim().startsWith('/'),
+                        confirmEnabled = pathInputState.text.toString().trim().startsWith('/'),
                         onCancel = { showPathDialog = false },
                         onConfirm = {
-                            val path = pathInput.trim()
+                            val path = pathInputState.text.toString().trim()
                             showPathDialog = false
                             onAttachFilePath(path)
                         },

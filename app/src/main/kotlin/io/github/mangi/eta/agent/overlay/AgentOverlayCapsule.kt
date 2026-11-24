@@ -36,7 +36,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape as CouiCapsuleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.clearText
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Pause
@@ -70,16 +73,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.itos.coui.effect.couiButtonFeedback
-import com.itos.coui.motion.couiPressMotion
-import com.itos.coui.motion.rememberCouiPressMotion
-import com.itos.coui.shape.CouiCapsuleShape
-import com.itos.coui.shape.CouiShape
-import com.itos.coui.theme.CouiTheme
 import io.github.mangi.eta.R
 import io.github.mangi.eta.agent.virtualdisplay.VirtualDisplaySnapshot
 import io.github.mangi.eta.data.model.AppearanceUiStyle
 import io.github.mangi.eta.ui.app.LocalUiStyle
+import io.github.mangi.eta.ui.components.coui.couiButtonFeedback
+import io.github.mangi.eta.ui.components.coui.couiPressMotion
+import io.github.mangi.eta.ui.components.coui.rememberCouiPressMotion
+import io.github.suqi8.coui.kmp.squircle.SquircleShape as CouiShape
+import io.github.suqi8.coui.kmp.theme.COUITheme as CouiTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Icon
@@ -115,7 +117,7 @@ internal fun AgentOverlayCapsule(
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { visible = true }
     var supplementMode by remember { mutableStateOf(false) }
-    var supplementText by remember { mutableStateOf("") }
+    val supplementText = remember { TextFieldState() }
     val scope = rememberCoroutineScope()
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
@@ -123,7 +125,7 @@ internal fun AgentOverlayCapsule(
     fun setSupplementMode(enabled: Boolean) {
         onSupplementModeChange(enabled)
         supplementMode = enabled
-        if (!enabled) supplementText = ""
+        if (!enabled) supplementText.clearText()
     }
 
     // 收起键盘后再切换窗口焦点，避免输入法在窗口失焦瞬间闪退或残留。
@@ -187,7 +189,7 @@ internal fun AgentOverlayCapsule(
         val isCoui = LocalUiStyle.current == AppearanceUiStyle.COUI
         val couiDark = CouiTheme.isDark
         val capsuleShape = if (isCoui) {
-            CouiShape(targetCapsuleCorner, cornerWeight = 2.5f)
+            CouiShape(targetCapsuleCorner, weight = 2.5f)
         } else {
             RoundedCornerShape(targetCapsuleCorner)
         }
@@ -312,11 +314,10 @@ internal fun AgentOverlayCapsule(
                         }
                         if (supplementMode) {
                             OverlaySupplementInput(
-                                value = supplementText,
-                                onValueChange = { supplementText = it },
+                                state = supplementText,
                                 onCancel = { leaveSupplementMode() },
                                 onSend = {
-                                    val text = supplementText.trim()
+                                    val text = supplementText.text.toString().trim()
                                     if (text.isNotBlank()) leaveSupplementMode { onSupplement(text) }
                                 },
                             )

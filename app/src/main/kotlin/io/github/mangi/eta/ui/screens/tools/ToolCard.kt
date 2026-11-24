@@ -1,6 +1,7 @@
 package io.github.mangi.eta.ui.screens.tools
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -26,22 +27,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.itos.coui.effect.couiButtonFeedback
-import com.itos.coui.input.CouiHapticFeedback
-import com.itos.coui.input.performCouiHapticFeedback
-import com.itos.coui.layout.CouiPageDefaults
-import com.itos.coui.switch.CouiSwitchDefaults
-import com.itos.coui.switch.Switch as CouiSwitch
-import com.itos.coui.text.CouiTextKind
-import com.itos.coui.text.Text as CouiText
-import com.itos.coui.theme.CouiTheme
 import io.github.mangi.eta.R
 import io.github.mangi.eta.agent.tool.AgentToolCapabilities
 import io.github.mangi.eta.agent.tool.RootRequirement
@@ -49,17 +40,25 @@ import io.github.mangi.eta.data.model.AppearanceUiStyle
 import io.github.mangi.eta.ui.app.LocalUiStyle
 import io.github.mangi.eta.ui.components.ItemDescriptionDialog
 import io.github.mangi.eta.ui.components.coui.CouiIcon
+import io.github.mangi.eta.ui.components.coui.CouiPageDefaults
+import io.github.mangi.eta.ui.components.coui.CouiText
+import io.github.mangi.eta.ui.components.coui.CouiTextKind
+import io.github.mangi.eta.ui.components.coui.couiButtonFeedback
 import io.github.mangi.eta.ui.components.iconForTool
 import io.github.mangi.eta.ui.model.AgentToolsAction
 import io.github.mangi.eta.ui.model.ToolItemUi
 import io.github.mangi.eta.ui.model.actualToolName
 import io.github.mangi.eta.ui.model.toolCardAction
 import io.github.mangi.eta.ui.model.toolCardRequirement
+import io.github.suqi8.coui.kmp.utils.CouiHapticEffect
+import io.github.suqi8.coui.kmp.utils.rememberCouiHaptic
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import io.github.suqi8.coui.kmp.basic.Switch as CouiSwitch
+import io.github.suqi8.coui.kmp.theme.COUITheme as CouiTheme
 
 @Composable
 internal fun ToolSwitchRow(
@@ -70,6 +69,7 @@ internal fun ToolSwitchRow(
     capabilities: AgentToolCapabilities,
     onAction: (AgentToolsAction) -> Unit,
     modifier: Modifier = Modifier,
+    onInspectDescription: ((title: String, description: String) -> Unit)? = null,
 ) {
     var showDescription by remember(tool.id) { mutableStateOf(false) }
     val description = if (!rootGranted && tool.id == "terminal") {
@@ -78,6 +78,7 @@ internal fun ToolSwitchRow(
         tool.summary
     }
     val requirementText = toolRequirementText(tool.id, rootGranted, capabilities)
+    val fullDescription = listOfNotNull(description, requirementText).joinToString("\n\n")
     val action = toolCardAction(tool.id, capabilities)
     val actionLabel = when (action) {
         AgentToolsAction.OpenWebToolsSettings -> stringResource(R.string.web_tools_configure_action)
@@ -92,28 +93,23 @@ internal fun ToolSwitchRow(
     when (LocalUiStyle.current) {
         AppearanceUiStyle.COUI -> {
             val dark = CouiTheme.isDark
-            val colors = CouiPageDefaults.themeColors(dark)
-            val view = LocalView.current
+            val colors = CouiPageDefaults.themeColors()
+            val couiHaptic = rememberCouiHaptic()
             val interactionSource = remember { MutableInteractionSource() }
-            var optimisticChecked by remember(checked) { mutableStateOf(checked) }
-            val commitToggle: (Boolean) -> Unit = { target ->
-                optimisticChecked = target
-                onCheckedChange(target)
-            }
             Row(
                 modifier = modifier
                     .fillMaxWidth()
                     .heightIn(min = CouiPageDefaults.rowMinHeight)
                     .couiButtonFeedback(dark, interactionSource, enabled = true, list = true)
                     .toggleable(
-                        value = optimisticChecked,
+                        value = checked,
                         interactionSource = interactionSource,
                         indication = null,
                         enabled = true,
                         role = Role.Switch,
                         onValueChange = { target ->
-                            view.performCouiHapticFeedback(CouiHapticFeedback.Switch, true)
-                            commitToggle(target)
+                            couiHaptic(CouiHapticEffect.Switch)
+                            onCheckedChange(target)
                         },
                     )
                     .padding(
@@ -132,7 +128,7 @@ internal fun ToolSwitchRow(
                         imageVector = iconVector,
                         contentDescription = null,
                         modifier = Modifier.size(21.dp),
-                        tint = if (optimisticChecked) colors.accent else colors.summary.copy(alpha = 0.65f),
+                        tint = if (checked) colors.accent else colors.summary.copy(alpha = 0.65f),
                     )
                 }
 
@@ -209,7 +205,13 @@ internal fun ToolSwitchRow(
                         .padding(start = 8.dp)
                         .size(28.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .clickable(role = Role.Button) { showDescription = true },
+                        .clickable(role = Role.Button) {
+                            if (onInspectDescription != null) {
+                                onInspectDescription(tool.title, fullDescription)
+                            } else {
+                                showDescription = true
+                            }
+                        },
                     contentAlignment = Alignment.Center,
                 ) {
                     CouiIcon(
@@ -223,13 +225,9 @@ internal fun ToolSwitchRow(
                 Spacer(Modifier.width(8.dp))
 
                 CouiSwitch(
-                    checked = optimisticChecked,
-                    onCheckedChange = null,
-                    dark = dark,
-                    colors = CouiSwitchDefaults.colors(colors.accent, dark),
+                    checked = checked,
+                    onCheckedChange = onCheckedChange,
                     enabled = true,
-                    interactionSource = interactionSource,
-                    onDragCheckedChange = commitToggle,
                 )
             }
         }
@@ -293,11 +291,11 @@ internal fun ToolSwitchRow(
                         color = MiuixTheme.colorScheme.onBackground,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false),
                     )
                     if (requirementText != null) {
                         Box(
                             modifier = Modifier
+                                .weight(1f, fill = false)
                                 .clip(RoundedCornerShape(6.dp))
                                 .background(MiuixTheme.colorScheme.onSurface.copy(alpha = 0.06f))
                                 .padding(horizontal = 6.dp, vertical = 2.dp),
@@ -307,7 +305,8 @@ internal fun ToolSwitchRow(
                                 style = MiuixTheme.textStyles.footnote1.copy(fontSize = 11.sp),
                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                                 maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
+                                softWrap = false,
+                                modifier = Modifier.basicMarquee(),
                             )
                         }
                     }
@@ -348,12 +347,14 @@ internal fun ToolSwitchRow(
         }
     }
 
-    ItemDescriptionDialog(
-        show = showDescription,
-        title = tool.title,
-        description = listOfNotNull(description, requirementText).joinToString("\n\n"),
-        onDismiss = { showDescription = false },
-    )
+    if (onInspectDescription == null) {
+        ItemDescriptionDialog(
+            show = showDescription,
+            title = tool.title,
+            description = fullDescription,
+            onDismiss = { showDescription = false },
+        )
+    }
 }
 
 @Composable

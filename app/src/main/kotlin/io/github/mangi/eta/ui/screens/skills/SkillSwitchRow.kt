@@ -15,48 +15,47 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.layout.boundsInWindow
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.itos.coui.dialog.CouiDialogDefaults
-import com.itos.coui.icons.CouiIcons
-import com.itos.coui.layout.CouiPageDefaults
-import com.itos.coui.layout.Item
-import com.itos.coui.menu.CouiMenuItem
-import com.itos.coui.menu.Menu
-import com.itos.coui.menu.couiMenuAnchor
-import com.itos.coui.menu.rememberCouiMenuAnchor
-import com.itos.coui.switch.CouiSwitchDefaults
-import com.itos.coui.switch.Switch as CouiSwitch
-import com.itos.coui.text.CouiTextKind
-import com.itos.coui.text.Text as CouiText
-import com.itos.coui.theme.CouiTheme
 import io.github.mangi.eta.R
 import io.github.mangi.eta.data.model.AppearanceUiStyle
 import io.github.mangi.eta.ui.app.LocalUiStyle
 import io.github.mangi.eta.ui.components.EtaTopLayer
 import io.github.mangi.eta.ui.components.ItemDescriptionDialog
 import io.github.mangi.eta.ui.components.coui.CouiIcon
+import io.github.mangi.eta.ui.components.coui.CouiItem
+import io.github.mangi.eta.ui.components.coui.CouiMenu
+import io.github.mangi.eta.ui.components.coui.CouiMenuItem
+import io.github.mangi.eta.ui.components.coui.CouiPageDefaults
+import io.github.mangi.eta.ui.components.coui.CouiText
+import io.github.mangi.eta.ui.components.coui.CouiTextKind
+import io.github.mangi.eta.ui.components.coui.couiMenuAnchor
+import io.github.mangi.eta.ui.components.coui.rememberCouiMenuAnchor
 import io.github.mangi.eta.ui.components.currentGlassOverlayBackdrop
 import io.github.mangi.eta.ui.model.SkillItemUi
+import io.github.suqi8.coui.kmp.icon.COUIIcons
+import io.github.suqi8.coui.kmp.icon.extended.More
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.glass.GlassPopup
 import top.yukonga.miuix.kmp.glass.GlassPopupDefaults
 import top.yukonga.miuix.kmp.glass.GlassPopupItem
+import top.yukonga.miuix.kmp.glass.GlassTransformPopup
+import top.yukonga.miuix.kmp.glass.glassPopupAnchor
+import top.yukonga.miuix.kmp.glass.glassPopupAnchorContent
+import top.yukonga.miuix.kmp.glass.rememberGlassPopupAnchor
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.glass.Delete
 import top.yukonga.miuix.kmp.icon.glass.Info
 import top.yukonga.miuix.kmp.icon.glass.More
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import io.github.suqi8.coui.kmp.basic.Switch as CouiSwitch
+import io.github.suqi8.coui.kmp.theme.COUITheme as CouiTheme
 
 @Composable
 internal fun SkillSwitchRow(
@@ -70,9 +69,8 @@ internal fun SkillSwitchRow(
 
     when (LocalUiStyle.current) {
         AppearanceUiStyle.COUI -> {
-            val dark = CouiTheme.isDark
-            val colors = CouiPageDefaults.themeColors(dark)
-            val destructiveColor = CouiDialogDefaults.themeColors(dark).destructive
+            val colors = CouiPageDefaults.themeColors()
+            val destructiveColor = CouiTheme.colorScheme.error
             var showMenu by remember { mutableStateOf(false) }
             val anchor = rememberCouiMenuAnchor()
             val viewDescText = stringResource(R.string.ui_view_description)
@@ -93,7 +91,7 @@ internal fun SkillSwitchRow(
                     }
                 }
             }
-            Item(
+            CouiItem(
                 enabled = enabled,
                 onClick = { onToggle(!skill.enabled) },
                 title = {
@@ -124,13 +122,13 @@ internal fun SkillSwitchRow(
                             contentAlignment = Alignment.Center,
                         ) {
                             CouiIcon(
-                                imageVector = CouiIcons.Outlined.More,
+                                imageVector = COUIIcons.More,
                                 contentDescription = stringResource(R.string.skills_more_named, skill.name),
                                 modifier = Modifier.size(20.dp),
                                 tint = colors.summary,
                             )
                         }
-                        Menu(
+                        CouiMenu(
                             expanded = showMenu,
                             onDismissRequest = { showMenu = false },
                             items = menuItems,
@@ -148,8 +146,6 @@ internal fun SkillSwitchRow(
                     CouiSwitch(
                         checked = skill.enabled,
                         onCheckedChange = onToggle,
-                        dark = dark,
-                        colors = CouiSwitchDefaults.colors(colors.accent, dark),
                         enabled = enabled,
                     )
                 },
@@ -157,7 +153,7 @@ internal fun SkillSwitchRow(
         }
         AppearanceUiStyle.MIUIX -> {
             var showMenu by remember { mutableStateOf(false) }
-            var moreBounds by remember { mutableStateOf(Rect.Zero) }
+            val moreAnchor = rememberGlassPopupAnchor()
             val overlayBackdrop = currentGlassOverlayBackdrop()
             BasicComponent(
                 enabled = enabled,
@@ -166,7 +162,10 @@ internal fun SkillSwitchRow(
                     Box(
                         modifier = Modifier
                             .align(Alignment.CenterVertically)
-                            .onGloballyPositioned { moreBounds = it.boundsInWindow() }
+                            .glassPopupAnchor(
+                                anchor = moreAnchor,
+                                cornerRadius = 16.dp,
+                            )
                             .size(32.dp)
                             .clip(CircleShape)
                             .clickable(role = Role.Button) { showMenu = true },
@@ -175,7 +174,9 @@ internal fun SkillSwitchRow(
                         Icon(
                             imageVector = MiuixIcons.Glass.More,
                             contentDescription = stringResource(R.string.skills_more_named, skill.name),
-                            modifier = Modifier.size(20.dp),
+                            modifier = Modifier
+                                .size(20.dp)
+                                .glassPopupAnchorContent(moreAnchor),
                             tint = MiuixTheme.colorScheme.onSurfaceVariantActions,
                         )
                     }
@@ -204,11 +205,19 @@ internal fun SkillSwitchRow(
                 )
             }
             EtaTopLayer {
-                GlassPopup(
+                GlassTransformPopup(
                     show = showMenu,
                     onDismissRequest = { showMenu = false },
-                    anchorBounds = moreBounds,
+                    anchor = moreAnchor,
                     backdrop = overlayBackdrop,
+                    anchorContent = {
+                        Icon(
+                            imageVector = MiuixIcons.Glass.More,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint = MiuixTheme.colorScheme.onSurfaceVariantActions,
+                        )
+                    },
                 ) {
                     GlassPopupItem(
                         text = stringResource(R.string.ui_view_description),
